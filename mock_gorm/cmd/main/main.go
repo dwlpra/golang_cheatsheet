@@ -4,47 +4,34 @@ import (
 	"context"
 	"fmt"
 	"golang_cheatsheet/mock_gorm/internal/config"
+	"golang_cheatsheet/mock_gorm/internal/delivery/routine"
+	"golang_cheatsheet/mock_gorm/internal/repository"
+	"golang_cheatsheet/mock_gorm/internal/usecase"
+
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/spf13/viper"
 )
 
 const APP_TIMEOUT = time.Duration(10) * time.Second
 
 func main() {
-	viperConfig := viper.New()
-	viperConfig.SetConfigFile(".env")
-	if err := viper.ReadInConfig(); err != nil {
-		panic(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	db, err := config.NewDatabase(viperConfig)
+	viperConfig := config.NewViper()
+
+	_, cancel := context.WithCancel(context.Background())
+	db, err := config.NewDatabase(viperConfig, &config.GormOpener{})
 	if err != nil {
 		fmt.Println("Failed to connect to database")
 		return
 	}
-
+	fmt.Println("connected to database")
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func(ctx context.Context) {
-		defer wg.Done()
-		for {
-			select {
-			case <-ctx.Done():
-				fmt.Println("worker is shutting down")
-				time.Sleep(11 * time.Second)
-				fmt.Println("worker is shut down")
-				return
-			default:
-				fmt.Println("worker is running")
-				time.Sleep(2 * time.Second)
-			}
-		}
-	}(ctx)
+
+	userRepo := repository.NewUserRepository(db)
+	userUsecase := usecase.NewUserUsecase(userRepo)
+	routine.NewUserRoutine(userUsecase)
 
 	terminateSignals := make(chan os.Signal, 1)
 	signal.Notify(terminateSignals, syscall.SIGINT, syscall.SIGTERM)
