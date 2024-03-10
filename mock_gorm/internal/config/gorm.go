@@ -3,12 +3,21 @@ package config
 import (
 	"fmt"
 
-	"github.com/spf13/viper"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
-func NewDatabase(viperConfig *viper.Viper) (*gorm.DB, error) {
+type DatabaseOpener interface {
+	Open(dsn string) (*gorm.DB, error)
+}
+
+type GormOpener struct{}
+
+func (g *GormOpener) Open(dsn string) (*gorm.DB, error) {
+	return gorm.Open(postgres.Open(dsn), &gorm.Config{})
+}
+
+func NewDatabase(viperConfig Viper, opener DatabaseOpener) (*gorm.DB, error) {
 	user := viperConfig.GetString("db_user")
 	pass := viperConfig.GetString("db_pass")
 	host := viperConfig.GetString("db_host")
@@ -16,11 +25,7 @@ func NewDatabase(viperConfig *viper.Viper) (*gorm.DB, error) {
 	dbName := viperConfig.GetString("db_name")
 
 	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", user, pass, host, port, dbName)
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		return nil, err
-	}
-	return db, nil
+	return opener.Open(dsn)
 }
 
 func CloseDB(db *gorm.DB) error {
